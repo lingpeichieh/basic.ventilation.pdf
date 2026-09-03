@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>機械通氣導論1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #FFFFFF; color: #1F1F1F; overflow-x: hidden; touch-action: manipulation; }
+        .card-container { perspective: 1000px; width: 100%; max-width: 450px; height: 320px; position: relative; }
+        .card-inner {
+            position: relative; width: 100%; height: 100%; text-align: center;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-style: preserve-3d; cursor: pointer;
+        }
+        .card-inner.is-flipped { transform: rotateY(180deg); }
+        .card-face {
+            position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 2rem; border-radius: 1.5rem; border: 1px solid #E5E7EB;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04);
+        }
+        .card-front { background-color: #F9FAFB; }
+        .card-back { background-color: #F0F7FF; transform: rotateY(180deg); color: #1A56DB; }
+        
+        .feedback-overlay {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 8rem; font-weight: bold; z-index: 50; pointer-events: none;
+            opacity: 0; transform: scale(0.5);
+        }
+        .animate-feedback { animation: feedbackPop 0.5s ease-out forwards; }
+        @keyframes feedbackPop {
+            0% { opacity: 0; transform: scale(0.4); }
+            30% { opacity: 0.9; transform: scale(1.1); }
+            100% { opacity: 0; transform: scale(1.3); }
+        }
+
+        .badge {
+            position: absolute; top: 1rem; right: 1rem; width: 28px; height: 28px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: bold; opacity: 0; transition: all 0.3s;
+        }
+        .badge.show { opacity: 1; }
+        .badge-correct { background-color: #DCFCE7; color: #16A34A; }
+        .badge-wrong { background-color: #FEE2E2; color: #DC2626; }
+        .badge-skipped { background-color: #F3F4F6; color: #6B7280; }
+
+        .btn-circle {
+            width: 64px; height: 64px; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; transition: all 0.2s;
+            border: 1px solid #E5E7EB; background: white;
+        }
+        .btn-circle:active { transform: scale(0.9); background: #F3F4F6; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between py-10 px-6">
+
+    <div class="w-full max-w-[450px] space-y-4">
+        <div class="flex justify-between items-end">
+            <div>
+                <span id="current-mode" class="text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-1">精進模式</span>
+                <span class="text-2xl font-bold tracking-tighter" id="counter">1 / 95</span>
+            </div>
+            <div class="flex gap-1.5">
+                <div class="text-center px-2">
+                    <p class="text-[12px] font-bold text-gray-400 uppercase">學會</p>
+                    <p id="learned-stat" class="font-bold text-green-600">0</p>
+                </div>
+                <div class="text-center px-2 border-l">
+                    <p class="text-[12px] font-bold text-gray-400 uppercase">不熟</p>
+                    <p id="wrong-stat" class="font-bold text-red-600">0</p>
+                </div>
+                <div class="text-center px-2 border-l">
+                    <p class="text-[12px] font-bold text-gray-400 uppercase">跳過</p>
+                    <p id="skip-stat" class="font-bold text-gray-500">0</p>
+                </div>
+            </div>
+        </div>
+        <div class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+            <div id="progress-fill" class="h-full bg-black transition-all duration-500" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <div class="card-container">
+        <div id="feedback" class="feedback-overlay"></div>
+        <div id="card" class="card-inner">
+            <div class="card-face card-front">
+                <div id="badge-front" class="badge"></div>
+                <span class="text-[12px] font-black text-gray-300 uppercase tracking-widest mb-6">Question</span>
+                <p id="question" class="text-xl font-medium leading-snug text-gray-800 px-4"></p>
+            </div>
+            <div class="card-face card-back">
+                <span class="text-[12px] font-black text-blue-300 uppercase tracking-widest mb-6">Answer</span>
+                <p id="answer" class="text-xl font-bold px-4"></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-full max-w-[450px] flex flex-col items-center gap-8">
+        <div class="flex items-center gap-6">
+            <button id="mark-wrong" class="btn-circle shadow-sm">
+                <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            
+            <button id="mark-skip" class="flex flex-col items-center group">
+                <div class="w-12 h-12 rounded-full border border-gray-200 flex items-center justify-center bg-gray-50 group-active:scale-95 transition-all">
+                    <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                </div>
+                <span class="text-[12px] font-black text-gray-400 mt-2 tracking-tighter">SKIP</span>
+            </button>
+
+            <button id="mark-correct" class="btn-circle shadow-sm">
+                <svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+            </button>
+        </div>
+        
+        <div class="flex gap-4 items-center text-[12px] font-black text-gray-300 uppercase tracking-widest">
+            <button id="prev" class="hover:text-black">PREV</button>
+            <button id="shuffle" class="hover:text-blue-600 border-x px-4">SHUFFLE</button>
+            <button id="restart" class="hover:text-red-500 border-r pr-4">RESET</button>
+            <button id="next" class="hover:text-black">NEXT</button>
+        </div>
+    </div>
+
+    <script>
+        // 已完美置換為新檔案的 95 題純文字資料
+        const allData = [
+            ["請區分「換氣」(Ventilation) 與「呼吸」(Respiration) 在機制上的本質差異。", "換氣是指氣體的大量流動（Bulk flow），而呼吸是指分子層級的化學氣體交換（Molecular diffusion）。"],
+            ["「內呼吸」(Internal Respiration) 主要發生的生理部位為何？", "發生在全身微血管與組織細胞之間，即血流與線粒體（Mitochondria）的介面。"],
+            ["「外呼吸」(External Respiration) 的氣體交換發生在何處？", "發生在肺部的肺泡-微血管（A-C）薄膜介面。"],
+            ["在無輔助的呼吸循環中，氣體流量在何時會達到平衡（Zero flow）狀態？", "發生在吸氣末期（End of inspiration）與吐氣末期（End of exhalation）。"],
+            ["氣體流動（Gas flow）的基本驅動力為何？", "氣體流動是由壓力梯度（Pressure gradients）驅動，氣體永遠從高壓區流向低壓區。"],
+            ["自主吸氣時，肺部產生負壓的機制為何？", "胸廓擴張使胸膜腔壓力（Ppl）由 -5 下降至 -10 cmH2O，進而帶動肺泡壓（PA）低於大氣壓。"],
+            ["自主吸氣屬於「主動」還是「被動」運動？請說明原因。", "主動運動，因為需要肌肉（橫膈、外肋間肌）收縮提供能量以克服彈性與阻力負載。"],
+            ["安靜呼吸（Quiet Breathing）時的吐氣機制為何？", "純粹依靠肺部與胸壁的被動彈性回彈（Passive elastic recoil）。"],
+            ["若要進行「強力吐氣」（Forced Exhalation），身體需具備什麼條件？", "需要募集主動肌肉（如腹肌）來壓縮胸廓，使肺泡壓顯著高於大氣壓。"],
+            ["負責使胸廓「上下」徑擴張的主要吸氣肌為何？", "橫膈膜（Diaphragm），受膈神經（Phrenic nerve）支配。"],
+            ["外肋間肌（External Intercostals）收縮時，對胸廓會產生什麼影響？", "提升肋骨以增加胸廓的圓周徑（Circumference）。"],
+            ["臨床上觀察到病患使用「輔助呼吸肌」（如斜角肌、胸鎖乳突肌）代表什麼徵兆？", "代表呼吸功（Work of Breathing, WOB）顯著增加，身體正在對抗嚴重的抗力。"],
+            ["列舉三組負責主動壓縮胸腔以進行吐氣的腹部肌肉。", "腹直肌、腹內/外斜肌、腹橫肌。"],
+            ["單位換算：1 mmHg 等於多少 cmH2O？", "1.36 cmH2O。"],
+            ["單位換算：1 kPa 等於多少 mmHg？", "7.5 mmHg。"],
+            ["在自主呼吸下，呼吸道開口壓力（Pawo）的數值通常為何？", "恆定為 0 cmH2O（即大氣壓）。"],
+            ["何種臨床設備會使體表壓力（Pbs）呈現正值？", "高壓氧艙（Hyperbaric Chamber）。"],
+            ["「鐵肺」（Iron Lung）屬於何種型式的通氣方式？", "負壓通氣（Negative Pressure Ventilation, NPV）。"],
+            ["跨肺壓（Transpulmonary Pressure, P_L）的定義公式為何？", "P_L = Palv - Ppl（肺泡壓減去胸膜腔壓力）。"],
+            ["胸膜腔壓力（Ppl）在吐氣末期與吸氣末期的正常數值分別為何？", "吐氣末約 -5 cmH2O；吸氣末約 -10 cmH2O。"],
+            ["負壓通氣（NPV）如何引發肺部擴張？", "在體表產生負壓傳導至胸膜腔，使肺泡壓低於呼吸道開口壓力，形成壓力差帶動氣流。"],
+            ["何謂 NPV 導致的「坦克休克」（Tank Shock）？", "負壓施加於下半身導致靜脈血液大量淤積在腹部，減少回心血量，常見於低血容病患。"],
+            ["NPV 為何會增加阻塞性睡眠呼吸中止（OSA）的風險？", "因為負壓可能導致聲門（Glottis）關閉或上呼吸道塌陷。"],
+            ["正壓通氣（PPV）與自主呼吸在「吸氣壓力梯度」上有何本質不同？", "PPV 是藉由提高呼吸道開口壓力（Pawo）使其顯著高於肺泡壓來達成充氣。"],
+            ["正壓通氣（PPV）中，「最高氣道峰壓」（PIP）的定義為何？", "吸氣末期呼吸道開口處記錄到的絕對最高壓力值。"],
+            ["高原壓（Pplateau）通常在何種臨床操作下測量？其目的為何？", "在吸氣末暫停（Inspiratory pause）且無氣流時測量，用於計算靜態肺順應性。"],
+            ["「呼氣末正壓」（PEEP）在生理上的主要功能為何？", "藉由增加功能性餘氣量（FRC）來維持肺泡穩定，防止肺塌陷（Atelectasis）。"],
+            ["何謂「內源性 PEEP」（Intrinsic PEEP / Auto-PEEP）？", "因吐氣時間（Te）不足導致氣體意外滯留（Air trapping）在肺內的現象。"],
+            ["在存在 Auto-PEEP 的情況下，病患啟動吸氣會發生什麼變化？", "吸氣會變得更費力，因為必須先克服內在的正壓才能產生負壓梯度引發氣流。"],
+            ["平均氣道壓（MAP）在臨床監測中與哪項指標最直接相關？", "MAP 是正壓通氣期間決定病患「氧合」（Oxygenation）效果的主要因素。"],
+            ["計算公式：靜態肺順應性（Cs）等於 _____ 除以 _____。", "潮氣容積（VT）；（高原壓 Pplateau - PEEP）。"],
+            ["動態肺順應性（Cd）與靜態肺順應性（Cs）在測量條件上的最大差異為何？", "Cd 是在氣體流動（Active gas flow）狀態下計算，包含了呼吸道的阻力負載。"],
+            ["高頻通氣（HFV）的核心操作典範為何？", "利用極高的頻率結合極低的潮氣容積（通常低於解剖死腔）。"],
+            ["高頻通氣（HFV）的主要臨床目標之一為何？", "最小化氣道峰壓以預防肺壓傷（Barotrauma）。"],
+            ["在 V/Q 比值（Ventilation/Perfusion）中，若比值大於 1 代表什麼？", "代表死腔（Dead space）效應，即換氣過度但血流不足。"],
+            ["在 V/Q 比值中，若比值小於 1 代表什麼？", "代表分流（Shunt）效應，即血流豐富但換氣不足。"],
+            ["下列何種疾病常導致「低 V/Q 比值」？（請列舉兩例）", "氣喘（Asthma）、肺炎（Pneumonia）或肺水腫。"],
+            ["肺栓塞（Pulmonary Embolism）會導致何種 V/Q 變化？", "高 V/Q 比值（因為血管阻塞導致灌流 Q 減少）。"],
+            ["過度施加 PEEP 對肺泡與微血管會產生什麼 V/Q 影響？", "可能導致肺泡過度擴張，壓迫周邊微血管，造成高 V/Q（死腔效應）。"],
+            ["「阻力負載」（Resistive Load）主要是由什麼引起的壓力消耗？", "為了克服呼吸道摩擦阻力所需要的壓力。"],
+            ["「彈性負載」（Elastic Load）在公式中如何表示？", "潮氣容積除以肺順應性（V / C）。"],
+            ["在固定流量通氣（Constant flow）下，潮氣容積的遞送與什麼呈線性關係？", "遞送量是設定流量（Flow）與吸氣時間（Ti）的乘積線性累積。"],
+            ["何謂「跨呼吸道壓」（Transrespiratory Pressure, PTR）？", "呼吸道開口壓力（Pawo）與體表壓力（Pbs）之間的壓力差。"],
+            ["哪一對壓力相等時，氣體的大量流動（Bulk flow）會停止？", "呼吸道開口壓力（Pawo）與肺泡壓（PA）相等時。"],
+            ["自主呼吸時，Pawo 為 0，PA 為 -1，此時氣流方向為何？", "由呼吸道開口流向肺泡（吸氣）。"],
+            ["正常人體體表壓力（Pbs）通常是多少？", "0 cmH2O（等於大氣壓）。"],
+            ["食道壓力監測（PES）在臨床上通常被視為哪種壓力的替代指標？", "胸膜腔壓力（Ppl）。"],
+            ["PPV 的吸氣相中，肺泡壓與胸膜腔壓力的變化趨勢為何？", "兩者均會上升（變為正值）。"],
+            ["在計算 P_L = Palv - Ppl 時，若 Palv = 0, Ppl = -10，跨肺壓為多少？", "+10 cmH2O。"],
+            ["若病患完全處於被動狀態，高原壓與 PEEP 的差值代表什麼壓力？", "肺泡的彈性回彈壓（Alveolar elastic recoil pressure）。"],
+            ["哪種通氣模式必須維持頭部暴露在大氣中，而身體密封在密閉室內？", "負壓通氣（NPV）。"],
+            ["呼吸器設定中，T_E 代表什麼？", "吐氣時間（Expiratory time）。"],
+            ["造成「分流」（Shunt）的最常見 V/Q 病理原因為何？", "肺泡塌陷（Atelectasis）或肺泡內充滿滲出液（如肺炎、肺水腫）。"],
+            ["慢性阻塞性肺病（COPD）病患常因什麼原因產生 Auto-PEEP？", "氣道提早關閉或阻塞，導致吐氣阻力增加且吐氣時間相對不足。"],
+            ["呼吸機臨床設定中，壓力單位通常使用什麼？", "cmH2O 或 mbar。"],
+            ["氣體分壓（Gas tensions）在臨床血氣分析中通常使用什麼單位？", "mmHg 或 Torr。"],
+            ["國際單位制（SI）中，壓力的科學標準單位為何？", "千帕（kPa）。"],
+            ["在自主呼吸下，P_L 的增加主要來自於 _____ 的下降。", "胸膜腔壓力（Ppl）。"],
+            ["在 PPV 模式下，P_L 的增加主要來自於 _____ 的上升。", "肺泡壓（PA / Palv）。"],
+            ["「吸氣末暫停操作」（Inspiratory pause maneuver）可以隔離出哪種負載？", "純肺泡彈性負載（排除阻力負載）。"],
+            ["為何 Auto-PEEP 會導致血壓下降？", "因為胸腔內壓持續維持高正壓，壓迫腔靜脈，減少靜脈回流心臟。"],
+            ["高頻振動通氣（HFOV）的吐氣相通常被描述為 _____？", "主動式吐氣（Active exhalation）。"],
+            ["輔助吸氣肌中的「胸小肌」負責什麼動作？", "協助拉開胸廓增加容量。"],
+            ["公式應用：已知潮氣量 500 mL，高原壓 25 cmH2O，PEEP 5 cmH2O，求 Cs。", "25 mL/cmH2O。"],
+            ["公式應用：已知潮氣量 500 mL，PIP 35 cmH2O，PEEP 5 cmH2O，求 Cd。", "16.67 mL/cmH2O。"],
+            ["在通氣力學中，「時間常數」（Time Constant）涉及哪兩個參數？", "阻力（Resistance）與順應性（Compliance）。"],
+            ["列舉一項會導致「阻力負載」增加的臨床狀況。", "呼吸道狹窄、支氣管痙攣或分泌物過多。"],
+            ["列舉一項會導致「彈性負載」增加（肺順應性下降）的臨床狀況。", "肺纖維化、肺水腫或 ARDS（急性呼吸窘迫症候群）。"],
+            ["「氣流阻力」（Resistance）的計算公式簡述為何？", "（氣道峰壓 PIP - Pplateau）除以流量（Flow）。"],
+            ["若吸氣時間 Ti 縮短，潮氣量固定，則通氣流量（Flow）會如何變化？", "流量必須增加。"],
+            ["負壓通氣對患者的可及性（Accessibility）有何負面影響？", "密閉式艙室設計嚴重限制了護理照顧與緊急醫療介入的空間。"],
+            ["什麼是「基線壓力」（Baseline Pressure）？", "呼吸循環中吐氣末期的壓力水準。"],
+            ["「死腔」（Dead Space）的生理定義為何？", "有換氣（Ventilation）但無灌流（Perfusion）的區域。"],
+            ["「分流」（Shunt）的生理定義為何？", "有灌流（Perfusion）但無換氣（Ventilation）的區域。"],
+            ["正常 V/Q 比值的理想目標數值為何？", "1.0。"],
+            ["在 HFV 中，「微量體積」（Micro-volumes）的具體含義為何？", "每次遞送的潮氣容積小於病患的解剖死腔量。"],
+            ["氧氣治療（Oxygen Therapy）的主要目標是增加什麼？", "增加氧分壓（Oxygen tension / PaO2）。"],
+            ["在 NPV 期間，大氣壓（ATM）相對於肺泡壓呈現何種狀態？", "ATM 高於肺泡壓，迫使空氣進入肺部。"],
+            ["當肺泡壓等於大氣壓時，吸氣還是吐氣會發生？", "兩者皆不會，氣流停止（平衡點）。"],
+            ["闊背肌（Latissimus dorsi）在呼吸中扮演什麼角色？", "作為主動吐氣肌，協助壓縮胸部空間。"],
+            ["根據講義，造成低氧血症（Hypoxemia）最常見的原因為何？", "V/Q 不均（V/Q mismatching）。"],
+            ["若要解決 Auto-PEEP 問題，應如何調整呼吸器設定？", "延長吐氣時間（Te），例如降低呼吸頻率或縮短吸氣時間。"],
+            ["「跨呼吸壓」（Transrespiratory pressure）增加代表什麼意義？", "代表克服整個呼吸系統（包含胸膜與呼吸道）所需的總壓差增加。"],
+            ["根據講義圖示，吐氣時肺泡壓會上升至約多少 cmH2O 以驅動氣體排出？", "+1 cmH2O。"],
+            ["吸氣末的高原壓主要反映了肺部的哪種性質？", "反映了肺泡的彈性特性（Elastic properties）。"],
+            ["在計算 Cs 時，為什麼病患必須完全放鬆（Passive）？", "為了確保測量到的壓力完全來自於呼吸系統的被動彈性，而非肌肉收縮。"],
+            ["在 PPV 下，哪種情況會使氣流停止？", "當呼吸道內壓力與肺泡內的背壓（Back pressure）達成平衡時。"],
+            ["輔助肌「胸大肌」在什麼情況下會被募集？", "在吸氣困難或需要增加吸氣深度（如急促呼吸）時。"],
+            ["單位換算：1 cmH2O 約等於多少 mmHg？", "0.735 mmHg。"],
+            ["下列何種壓力在自主呼吸時永遠小於大氣壓？", "胸膜腔壓力（Ppl）。"],
+            ["氣喘病患發生 Auto-PEEP 的主要生理機制為何？", "由於支氣管發炎腫脹導致小氣道過早關閉。"],
+            ["在計算阻力時，公式中的流量單位通常為何？", "L/sec。"],
+            ["「潮氣容積」（Tidal Volume）與「每分鐘通氣量」的關係為何？", "每分鐘通氣量 = 潮氣容積 × 呼吸頻率。"],
+            ["HFV 依靠什麼非傳統機制來維持氣體交換？", "分子的擴散與振動機制，而非單純的壓力梯度大量流動。"],
+            ["若 PEEP 設定為 10，PIP 設定為 30，則其「驅動壓」（Driving Pressure）為多少？", "20 cmH2O。"]
+        ];
+        let index = 0;
+        let stats = {}; 
+        let currentQueue = allData.map((d, i) => ({ q: d[0], a: d[1], origIdx: i }));
+
+        const card = document.getElementById('card');
+        const feedback = document.getElementById('feedback');
+        const badgeFront = document.getElementById('badge-front');
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function updateDisplay() {
+            card.classList.remove('is-flipped');
+            setTimeout(() => {
+                const item = currentQueue[index];
+                document.getElementById('question').textContent = item.q;
+                document.getElementById('answer').textContent = item.a;
+                document.getElementById('counter').textContent = `${index + 1} / ${currentQueue.length}`;
+                document.getElementById('progress-fill').style.width = `${((index + 1) / currentQueue.length) * 100}%`;
+                
+                const vals = Object.values(stats);
+                document.getElementById('learned-stat').textContent = vals.filter(v => v === 'learned').length;
+                document.getElementById('wrong-stat').textContent = vals.filter(v => v === 'wrong').length;
+                document.getElementById('skip-stat').textContent = vals.filter(v => v === 'skipped').length;
+
+                const status = stats[item.origIdx];
+                badgeFront.className = 'badge';
+                if (status === 'learned') {
+                    badgeFront.classList.add('badge-correct', 'show');
+                    badgeFront.innerHTML = 'O';
+                } else if (status === 'wrong') {
+                    badgeFront.classList.add('badge-wrong', 'show');
+                    badgeFront.innerHTML = 'X';
+                } else if (status === 'skipped') {
+                    badgeFront.classList.add('badge-skipped', 'show');
+                    badgeFront.innerHTML = '→';
+                }
+            }, 150);
+        }
+
+        function triggerFeedback(type) {
+            let symbol = '';
+            let colorClass = '';
+            
+            if (type === 'learned') { symbol = 'O'; colorClass = 'text-green-500'; }
+            else if (type === 'wrong') { symbol = 'X'; colorClass = 'text-red-500'; }
+            else { symbol = '→'; colorClass = 'text-gray-400'; }
+
+            feedback.textContent = symbol;
+            feedback.className = `feedback-overlay animate-feedback ${colorClass}`;
+            
+            feedback.addEventListener('animationend', () => {
+                feedback.className = 'feedback-overlay';
+            }, { once: true });
+        }
+
+        function mark(type) {
+            const item = currentQueue[index];
+            stats[item.origIdx] = type;
+            triggerFeedback(type);
+            
+            setTimeout(() => {
+                if (index < currentQueue.length - 1) {
+                    index++;
+                    updateDisplay();
+                } else {
+                    finishSession();
+                }
+            }, 450);
+        }
+
+        function finishSession() {
+            const wrongIdxs = currentQueue.filter(d => stats[d.origIdx] === 'wrong').map(d => d.origIdx);
+            const skipIdxs = currentQueue.filter(d => stats[d.origIdx] === 'skipped').map(d => d.origIdx);
+            const needReview = [...new Set([...wrongIdxs, ...skipIdxs])];
+
+            if (needReview.length > 0) {
+                if (confirm(`本輪結束！\n不熟：${wrongIdxs.length} 題\n跳過：${skipIdxs.length} 題\n\n是否對這些題目進行複習？`)) {
+                    currentQueue = needReview.map(i => ({ q: allData[i][0], a: allData[i][1], origIdx: i }));
+                    index = 0;
+                    document.getElementById('current-mode').textContent = "複習模式";
+                    document.getElementById('current-mode').classList.replace('text-blue-500', 'text-red-500');
+                    updateDisplay();
+                    return;
+                }
+            } else {
+                alert("恭喜！全數通過本題庫測試！");
+            }
+            resetAll();
+        }
+
+        function resetAll() {
+            stats = {}; index = 0;
+            currentQueue = allData.map((d, i) => ({ q: d[0], a: d[1], origIdx: i }));
+            document.getElementById('current-mode').textContent = "精進模式";
+            document.getElementById('current-mode').classList.remove('text-red-500', 'text-purple-600');
+            document.getElementById('current-mode').classList.add('text-blue-500');
+            updateDisplay();
+        }
+
+        document.getElementById('shuffle').onclick = () => {
+            if (confirm("要打亂題目順序並重新開始嗎？")) {
+                stats = {}; 
+                index = 0;
+                currentQueue = shuffleArray(allData.map((d, i) => ({ q: d[0], a: d[1], origIdx: i })));
+                const modeTag = document.getElementById('current-mode');
+                modeTag.textContent = "隨機模式";
+                modeTag.className = "text-[10px] font-black text-purple-600 uppercase tracking-widest block mb-1";
+                updateDisplay();
+            }
+        };
+
+        card.onclick = () => card.classList.toggle('is-flipped');
+        document.getElementById('mark-correct').onclick = () => mark('learned');
+        document.getElementById('mark-wrong').onclick = () => mark('wrong');
+        document.getElementById('mark-skip').onclick = () => mark('skipped');
+        document.getElementById('next').onclick = () => { if (index < currentQueue.length - 1) { index++; updateDisplay(); } };
+        document.getElementById('prev').onclick = () => { if (index > 0) { index--; updateDisplay(); } };
+        document.getElementById('restart').onclick = () => { if(confirm("確定要重置所有進度嗎？")) resetAll(); };
+
+        updateDisplay();
+    </script>
+</body>
+</html>
